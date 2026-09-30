@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "شريان للتبرع العاجل بالدم",
+  "short_name": "شريان",
+  "description": "شبكة الإنقاذ والتبرع العاجل بالدم: تنبيه المتبرعين القريبين حسب فصيلة الدم",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F5F7",
+  "theme_color": "#C8102E",
+  "categories": ["medical", "health"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
