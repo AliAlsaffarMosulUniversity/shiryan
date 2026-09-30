@@ -36,22 +36,22 @@
   const DAY = 864e5, WAIT_DAYS = 90;
   const daysLeft = () => S.lastDonation ? Math.max(0, Math.ceil((S.lastDonation + WAIT_DAYS * DAY - Date.now()) / DAY)) : 0;
 
-  const HOSP = [
-    { id: "h1", name: "المستشفى الجمهوري", dist: 3.2, drive: 9, need: 3 },
-    { id: "h2", name: "مستشفى ابن سينا التعليمي", dist: 4.7, drive: 13, need: 2 },
-    { id: "h3", name: "مستشفى السلام التعليمي", dist: 8.9, drive: 21, need: 2 }
-  ];
+  /* القائمة في ملف hospitals.js. المسافات تجريبية لحين ربط المواقع الحقيقية */
+  const HOSP = HOSPITALS.map((h, i) => {
+    const dist = Math.round((2.5 + ((i * 37) % 60) / 10) * 10) / 10;
+    return Object.assign({ id: "h" + (i + 1), dist, drive: Math.round(dist * 2.6), need: h.type === "مصرف دم" ? 4 : 2 + (i % 2) }, h);
+  });
   function cases() {
     let c = store.get("cases", null);
     if (!c) {
       const now = Date.now();
-      c = [{ h: "h2", crit: false, deadline: now + 3 * 3600e3, got: 1 }];
+      c = HOSP.filter((h) => h.dist <= 5).slice(1, 3).map((h, i) => ({ h: h.id, crit: false, deadline: now + (3 + i * 2) * 3600e3, got: i ? 0 : 1 }));
       store.set("cases", c);
     }
     return c.filter((x) => x.deadline > Date.now()).map((x) => Object.assign({}, HOSP.find((h) => h.id === x.h), x));
   }
   const inbox = () => store.get("inbox", [
-    { t: "تم تأمين العدد الكافي من المتبرعين", d: "حالة سابقة في مستشفى السلام التعليمي، لا حاجة للحضور. شكراً لاستعدادك.", k: "covered", at: Date.now() - 2 * 3600e3 },
+    { t: "تم تأمين العدد الكافي من المتبرعين", d: "حالة سابقة في مستشفى ابن سينا التعليمي، لا حاجة للحضور. شكراً لاستعدادك.", k: "covered", at: Date.now() - 2 * 3600e3 },
     { t: "فصيلتك مطلوبة بكثرة هذا الأسبوع", d: "بنوك الدم في منطقتك تحتاج متبرعين من فصيلتك.", k: "info", at: Date.now() - 3 * DAY }
   ]);
   const pushInbox = (n) => { const l = inbox(); l.unshift(Object.assign({ at: Date.now() }, n)); store.set("inbox", l.slice(0, 30)); };
@@ -69,12 +69,12 @@
   function route() {
     timers.forEach(clearInterval); timers = [];
     const r = (location.hash.replace(/^#\/?/, "") || "home").split("/")[0];
-    const V = { home, alert, check, route: routeV, track, inbox: inboxV, settings };
+    const V = { home, alert, check, route: routeV, track, inbox: inboxV, settings, hospitals };
     const full = ["alert", "check", "route"].includes(r);
     document.body.classList.toggle("full", full);
     document.body.classList.toggle("alerting", r === "alert");
     (V[r] || home)();
-    nav(V[r] ? (full ? "" : r) : "home");
+    nav(V[r] ? (full ? "" : r === "hospitals" ? "home" : r) : "home");
     window.scrollTo(0, 0);
   }
 
@@ -94,17 +94,19 @@
   }
   function triggerEmergency() {
     const now = Date.now();
-    const c = store.get("cases", []).filter((x) => x.h !== "h1");
-    c.unshift({ h: "h1", crit: true, deadline: now + 45 * 6e4, got: 1 });
+    const pool = HOSP.filter((h) => h.dist <= S.radius);
+    const H = (pool.length ? pool : HOSP)[Math.floor(Math.random() * (pool.length || HOSP.length))];
+    const c = store.get("cases", []).filter((x) => x.h !== H.id);
+    c.unshift({ h: H.id, crit: true, deadline: now + 45 * 6e4, got: 1 });
     store.set("cases", c);
-    store.set("active", "h1");
-    pushInbox({ t: `مطلوب ${S.blood} في المستشفى الجمهوري`, d: "حالة حرجة، 3.2 كم، مطلوب خلال 45 دقيقة", k: "crit" });
+    store.set("active", H.id);
+    pushInbox({ t: `مطلوب ${S.blood} في ${H.name}`, d: `حالة حرجة، ${H.dist} كم، مطلوب خلال 45 دقيقة`, k: "crit" });
     if (navigator.vibrate) navigator.vibrate(S.vib === "heart" ? [120, 90, 160, 700, 120, 90, 160, 700, 120, 90, 160] : [1200, 200, 1200, 200, 1200]);
     beep();
     if (S.flash) { const f = document.createElement("div"); f.className = "flash"; document.body.appendChild(f); setTimeout(() => f.remove(), 1600); }
     if ("Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) {
       navigator.serviceWorker.ready.then((reg) => reg.showNotification("شريان: حالة طارئة", {
-        body: `مريض بحاجة عاجلة لفصيلة ${S.blood} في المستشفى الجمهوري، 3.2 كم`,
+        body: `مريض بحاجة عاجلة لفصيلة ${S.blood} في ${H.name}، ${H.dist} كم`,
         icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "emergency", renotify: true, requireInteraction: true,
         vibrate: [120, 90, 160, 700, 120, 90, 160], dir: "rtl", lang: "ar",
         actions: [{ action: "accept", title: "أستطيع التبرع" }, { action: "decline", title: "لا أستطيع" }]
@@ -138,9 +140,11 @@
           : `<div class="empty">${!S.available ? "أنت غير متاح حالياً. فعّل الزر أعلاه لتصلك الحالات." : dl ? "شكراً لتبرعك. ستصلك الحالات بعد انتهاء فترة الراحة." : "لا توجد حالات مطابقة قريبة الآن. سننبّهك فور ظهور حالة."}</div>`}
       </section>
       ${store.get("donation", null) ? `<a class="lastcard" href="#/track"><div><span style="font-size:13px;color:#E8C5CC">آخر تبرع لك</span><br><b style="font-size:16px">شاهد رحلة تبرعك</b></div><span class="icb" style="background:#4A1420;border:0;color:#fff">${ic("fwd", 20)}</span></a>` : ""}
+      <a class="note" href="#/hospitals"><span class="ic" style="background:var(--redl);color:var(--red)">${ic("hosp", 22)}</span>
+        <span style="display:flex;flex-direction:column;gap:3px;flex:1"><b style="font-size:14px">مستشفيات الموصل المشتركة</b><span class="mu">${HOSP.filter((h) => h.type === "حكومي").length} حكومي، ${HOSP.filter((h) => h.type === "أهلي").length} أهلي، ومصرف الدم</span></span><span style="align-self:center;color:var(--mu)">${ic("fwd", 20)}</span></a>
       <section class="card demo" style="display:flex;flex-direction:column;gap:10px">
         <b style="font-size:14px">عرض تجريبي</b>
-        <p class="mu" style="line-height:1.8">اضغط الزر، ثم أغلق الشاشة أو اترك الهاتف. بعد 5 ثوانٍ تصل حالة طارئة وهمية.</p>
+        <p class="mu" style="line-height:1.8">اضغط الزر وأبعد يدك عن الهاتف، مع إبقاء التطبيق مفتوحاً. بعد 5 ثوانٍ تصل حالة طارئة وهمية.</p>
         <button class="btn p sm" id="sim">${ic("bell", 20)}محاكاة حالة طارئة</button>
       </section>`;
     $m.querySelector("#av").addEventListener("change", (e) => { S.available = e.target.checked; save(); home(); });
@@ -339,6 +343,27 @@
       ["cases", "inbox", "donation", "active"].forEach((k) => localStorage.removeItem("sh:" + k));
       S.lastDonation = 0; save(); toast("تمت إعادة الضبط"); location.hash = "#/home";
     });
+  }
+
+  // ---------- المستشفيات ----------
+  let hFilter = "all";
+  function hospitals() {
+    const groups = [["حكومي", "مستشفيات حكومية"], ["أهلي", "مستشفيات أهلية"], ["مصرف دم", "مصرف الدم"]];
+    const active = cases().map((c) => c.id);
+    const F = [["all", "الكل"], ["حكومي", "حكومي"], ["أهلي", "أهلي"]];
+    $m.innerHTML = `${top("#/home", "مستشفيات الموصل", "الجهات التي تصل منها الحالات")}
+      <div class="yn" role="group" aria-label="تصفية حسب النوع" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        ${F.map(([k, l]) => `<button class="y" data-f="${k}" aria-pressed="${hFilter === k}">${l}</button>`).join("")}</div>
+      ${groups.filter(([k]) => hFilter === "all" || k === hFilter || k === "مصرف دم").map(([k, l]) => {
+        const list = HOSP.filter((h) => h.type === k);
+        if (!list.length) return "";
+        return `<section style="display:flex;flex-direction:column;gap:8px"><h2 style="font-size:15px">${l} <span class="mu">(${list.length})</span></h2>
+          ${list.map((h) => `<div class="note" style="align-items:center"><span class="ic" style="background:${k === "مصرف دم" ? "var(--red)" : k === "أهلي" ? "var(--bluel)" : "var(--redl)"};color:${k === "مصرف دم" ? "#fff" : k === "أهلي" ? "var(--blue)" : "var(--red)"}">${ic(k === "مصرف دم" ? "drop" : "hosp", 22)}</span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:2px"><b style="font-size:14px">${esc(h.name)}</b><span class="mu" style="font-size:12px">${esc(h.kind)}${h.side ? "، الجانب " + h.side : ""}</span></span>
+            ${active.includes(h.id) ? `<span class="pill" style="background:var(--red);color:#fff">حالة نشطة</span>` : ""}</div>`).join("")}</section>`;
+      }).join("")}
+      <p class="mu" style="line-height:1.8;font-size:12px">المسافات في النسخة التجريبية تقديرية، وتُحسب فعلياً من موقعك في النسخة الكاملة.</p>`;
+    $m.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => { hFilter = b.dataset.f; hospitals(); }));
   }
 
   window.addEventListener("hashchange", route);
